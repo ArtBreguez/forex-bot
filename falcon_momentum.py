@@ -115,6 +115,7 @@ class FalconQuantPremiumReversion:
         atr = tr.rolling(14).mean()
         self.data['atr'] = atr
         atr_ma = atr.rolling(50).mean()
+        self.data['atr_ma'] = atr_ma
         ar = atr / (atr_ma + 1e-9)
         self.data['f8_score'] = 0.5
         self.data.loc[ar < 1.30, 'f8_score'] = 0.55
@@ -180,6 +181,7 @@ class FalconQuantPremiumReversion:
         
         close = self.data['close'].values
         atr = self.data['atr'].values
+        atr_ma = self.data['atr_ma'].values
         buy_sig = self.data['buy_signal'].values
         sell_sig = self.data['sell_signal'].values
         
@@ -230,10 +232,14 @@ class FalconQuantPremiumReversion:
                     # Cálculo de Lote: Risco Fixo $5 / (Pips * 10.0)
                     active_lots = max(0.01, round(risk_usd / (sl_pips * 10.0 + 1e-9), 2))
                     
-                    # 3. Slippage de "Cauda Longa" (Cauchy Distribution)
-                    # Simula eventos raros de alta derrapagem
-                    slip_pips = abs(np.random.standard_cauchy()) * 0.1 
-                    slip_pips = min(slip_pips, 5.0) # Cap para evitar infinitos matemáticos do Cauchy
+                    # 3. Slippage Dinâmico (Ajustado por Volatilidade e Cauda Longa)
+                    # O slippage aumenta em momentos de alta volatilidade (ATR atual > ATR médio)
+                    avg_atr = atr_ma[i]
+                    vol_multiplier = max(1.0, atr_p / (avg_atr + 1e-9))
+                    
+                    # Cauchy para cauda longa * multiplicador de volatilidade
+                    slip_pips = (abs(np.random.standard_cauchy()) * 0.1) * vol_multiplier
+                    slip_pips = min(slip_pips, 6.0) # Cap de segurança
                     
                     cost = active_lots * self.contract_size * ((hourly_spread + slip_pips) / 10000.0)
                     curr_eq -= cost
@@ -387,11 +393,52 @@ class FalconQuantPremiumReversion:
     def plot_monte_carlo(self, results):
         fig = go.Figure()
         x_axis = np.arange(len(results['p50']))
-        fig.add_trace(go.Scatter(x=x_axis, y=results['p95'], line=dict(color='rgba(0, 255, 0, 0.2)'), name='95th Percentile'))
-        fig.add_trace(go.Scatter(x=x_axis, y=results['p50'], line=dict(color='yellow'), name='Median (P50)'))
-        fig.add_trace(go.Scatter(x=x_axis, y=results['p5'], line=dict(color='rgba(255, 0, 0, 0.2)'), name='5th Percentile'))
-        fig.update_layout(title="Monte Carlo Stress Test (1000 Iterações)", template="plotly_dark", xaxis_title="Trade Number", yaxis_title="Equity ($)")
+        
+        # Sombra de Probabilidade (P5 - P95)
+        fig.add_trace(go.Scatter(
+            x=np.concatenate([x_axis, x_axis[::-1]]),
+            y=np.concatenate([results['p95'], results['p5'][::-1]]),
+            fill='toself',
+            fillcolor='rgba(0, 255, 204, 0.1)',
+            line=dict(color='rgba(255,255,255,0)'),
+            hoverinfo="skip",
+            showlegend=True,
+            name='Probability Tunnel (P5-P95)'
+        ))
+        
+        # Linha Mediana
+        fig.add_trace(go.Scatter(x=x_axis, y=results['p50'], 
+                                line=dict(color='#FFFF00', width=3), 
+                                name='Median Path (P50)'))
+        
+        fig.update_layout(title="Monte Carlo Probability Tunnel", 
+                          template="plotly_dark", 
+                          xaxis_title="Number of Trades", 
+                          yaxis_title="Equity ($)",
+                          legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01))
         return fig
+
+    def plot_distribution(self, symbol="EURUSD"):
+        if self.trade_log.empty: return None
+        
+        fig = go.Figure()
+        fig.add_trace(go.Histogram(
+            x=self.trade_log['Profit_USD'],
+            nbinsx=30,
+            marker_color='#00FFCC',
+            opacity=0.75,
+            name='Returns'
+        ))
+        
+        fig.update_layout(title=f"Return Distribution: {symbol}",
+                          template="plotly_dark",
+                          xaxis_title="Profit/Loss ($)",
+                          yaxis_title="Frequency",
+                          bargap=0.1)
+        
+        filename = f"chart_{symbol.lower()}_dist.png"
+        fig.write_image(filename)
+        return filename
 
     def plot_performance(self, symbol="EURUSD"):
         from plotly.subplots import make_subplots
@@ -422,30 +469,34 @@ class FalconQuantPremiumReversion:
         
         # Gerar Gráficos
         perf_chart = self.plot_performance(symbol)
+        dist_chart = self.plot_distribution(symbol)
         mc_chart = None
         if mc_results:
             fig_mc = self.plot_monte_carlo(mc_results)
             mc_chart = f"chart_{symbol.lower()}_mc.png"
             fig_mc.write_image(mc_chart)
 
-        report = f"# 📊 Relatório de Backtest Premium: {symbol}\n\n"
+        report = f"# 📊 Relatório de Backtest Elite: {symbol}\n\n"
         report += f"**Data de Geração**: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}\n"
         report += f"**Ativo**: {symbol} | **Timeframe**: 15M\n\n"
         
         report += "## 📈 Curva de Equity e Drawdown\n"
         report += f"![Performance]({perf_chart})\n\n"
+        
+        report += "## 📊 Distribuição de Retornos (Alpha Analysis)\n"
+        report += f"![Distribution]({dist_chart})\n\n"
 
         report += "## 📈 Métricas de Performance\n"
         report += "| Métrica | Valor |\n| :--- | :--- |\n"
         for k, v in metrics.items():
             report += f"| {k} | {v} |\n"
         
-        report += "\n## 🛡️ Auditoria de Realismo (Hedge Fund Grade)\n"
+        report += "\n## 🛡️ Auditoria de Realismo (Elite Grade)\n"
         report += f"| Parâmetro | Configuração | Impacto |\n| :--- | :--- | :--- |\n"
         report += f"| **Spread Dinâmico** | 1.3 - 3.2 pips | Rollover e baixa liquidez simulados |\n"
-        report += f"| **Slippage Fat-Tail** | Modelo Cauchy | Simula saltos de preço reais |\n"
+        report += f"| **Slippage por Volatilidade** | ATR-Scaled Cauchy | Simula dificuldade de execução real |\n"
         report += f"| **Swap Noturno** | $0.10/lote micro | Custo de carregamento real |\n"
-        report += f"| **Execução** | **Next-Bar (Open)** | Sem bias de olhar o futuro |\n"
+        report += f"| **Execução** | **Next-Bar (Open)** | Sem bias de olhar o futuro (Auditado) |\n"
 
         if mc_results:
             report += "\n## 🎲 Stress Test (Monte Carlo)\n"
