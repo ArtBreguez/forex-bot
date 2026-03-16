@@ -3,7 +3,7 @@ import numpy as np
 import plotly.graph_objects as go
 import time
 
-class FalconQuantPremiumReversion:
+class FalconEliteAlpha:
     def __init__(self, data: pd.DataFrame, initial_capital: float = 250.0, leverage: float = 20.0, target_profit_usd: float = 8.0, spread_pips: float = 1.3):
         """
         Estratégia Científica 'Fade the Exhaustion' para EURUSD 15M.
@@ -145,9 +145,9 @@ class FalconQuantPremiumReversion:
     def apply_trading_logic(self):
         self.generate_indicators()
         
-        # Pesos baseados na importância do paper (Chen 2020)
-        # Momentum(235), ROC(42), ADX(18), MACD(15), RSI(12), BB(10), Stoch(8), CCI(6), ATR(4), Vol(2)
-        raw_weights = np.array([235, 42, 18, 15, 12, 10, 8, 6, 4, 2])
+        # Ponderação Alinhada com strategy.mql5 (Otimizada para Forex)
+        # Momentum(90), ROC(75), ADX(65), MACD(60), RSI(55), BB(45), Stoch(35), CCI(30), ATR(25), Vol(20)
+        raw_weights = np.array([90, 75, 65, 60, 55, 45, 35, 30, 25, 20])
         weights = raw_weights / raw_weights.sum()
         
         scores_long = np.zeros(len(self.data))
@@ -165,13 +165,13 @@ class FalconQuantPremiumReversion:
         self.data['score_long'] = scores_long
         self.data['score_short'] = scores_short
         
-        # Filtros de Regime, CVaR e Sessão
-        is_trending = self.data['adx'] >= 20
-        cvar_filter = self.data['cvar'] <= 2.5 # Mais rigoroso
+        # Filtros de Regime, CVaR e Sessão (Alinhados com MT5)
+        is_trending = self.data['adx'] >= 18 # Era 20, agora 18 (igual MT5)
+        cvar_filter = self.data['cvar'] <= 3.0 # Era 2.5, agora 3.0 (igual MT5)
         session_filter = (self.data.index.hour >= 7) & (self.data.index.hour <= 17)
         
-        buy_signal = (self.data['score_long'] >= 0.58) & (agree_long >= 5) & is_trending & cvar_filter & session_filter
-        sell_signal = (self.data['score_short'] >= 0.58) & (agree_short >= 5) & is_trending & cvar_filter & session_filter
+        buy_signal = (self.data['score_long'] >= 0.60) & (agree_long >= 6) & is_trending & cvar_filter & session_filter
+        sell_signal = (self.data['score_short'] >= 0.60) & (agree_short >= 6) & is_trending & cvar_filter & session_filter
         
         self.data['buy_signal'] = buy_signal.astype(int)
         self.data['sell_signal'] = sell_signal.astype(int)
@@ -528,7 +528,7 @@ if __name__ == "__main__":
         path = f"c:\\Users\\Aline Fernanda\\Downloads\\project\\ticker_{sym.lower()}_data.parquet"
         try:
             df = carregar_parquet_e_agrupar(path)
-            sistema = FalconQuantPremiumReversion(df)
+            sistema = FalconEliteAlpha(df)
             sistema.backtest()
             
             metrics = sistema.calculate_advanced_metrics()

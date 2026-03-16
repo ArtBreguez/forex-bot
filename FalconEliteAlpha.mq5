@@ -336,14 +336,14 @@ Every single metric improved. The win rate went from coin-flip to 83%. Drawdown 
 The Complete Source Code
 Copy
 //+------------------------------------------------------------------+
-//|                                    LightGBM_CVaR_EA_v3.mq5      |
-//|        Basado en: "Financial Trading Strategy System Based       |
+//|                                     FalconEliteAlpha.mq5        |
+//|        Based on: "Financial Trading Strategy System Based       |
 //|        on Machine Learning" - Chen et al. (2020)                 |
-//|  v3.2: Trailing escalonado + Cierre parcial                     |
+//|  v4.0: Falcon Elite Alpha - Institutional Grade Precision       |
 //+------------------------------------------------------------------+
-#property copyright   "Chen et al. (2020) - Forex Adaptation v3.2"
-#property version     "3.20"
-#property description "LightGBM + CVaR Forex EA v3.2 - Trailing escalonado"
+#property copyright   "Falcon Elite Alpha - Institutional Logic"
+#property version     "4.00"
+#property description "Falcon Elite Alpha: LGBM-Factor Reversion + CVaR"
 #property strict
 
 #include <Trade\Trade.mqh>

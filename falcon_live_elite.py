@@ -5,10 +5,10 @@ import time
 import logging
 import os
 from datetime import datetime
-from falcon_momentum import FalconQuantPremiumReversion
+from falcon_elite_alpha import FalconEliteAlpha
 
 # Configuração de Logging Institucional
-log_filename = "falcon_live.log"
+log_filename = "falcon_live_elite.log"
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -17,7 +17,7 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
-logger = logging.getLogger("FalconLive")
+logger = logging.getLogger("FalconElite")
 
 class MT5FalconBridge:
     def __init__(self, symbol="EURUSD", timeframe=mt5.TIMEFRAME_M15, lot_size=0.1):
@@ -113,45 +113,59 @@ class MT5FalconBridge:
         logger.info(f"Portfolio Monitor Ativado: {symbols} (M15)")
         print("\n" + "="*50)
         print("   🦅 FALCON ELITE LIVE - 24/7 MONITORING   ")
-        print("="*50 + "\n")
+        print("="*50)
         
         last_processed_bars = {s: None for s in symbols}
         
         while True:
             try:
+                dashboard_lines = []
                 for symbol in symbols:
                     self.symbol = symbol
                     df = self.get_realtime_data(count=600)
                     
                     if df is not None:
-                        current_bar_time = df.index[-2]
+                        # Rodar Modelo para obter scores atuais (Live e Closed)
+                        model = FalconEliteAlpha(df)
+                        model.apply_trading_logic()
                         
+                        live_row = model.data.iloc[-1]
+                        current_bar_time = model.data.index[-2]
+                        
+                        # Dashboard Info
+                        score_l = live_row['score_long']
+                        score_s = live_row['score_short']
+                        tick_time = datetime.now().strftime('%H:%M:%S')
+                        
+                        line = f"[{symbol}] {tick_time} | Bar {model.data.index[-1].strftime('%H:%M')} | Score L: {score_l:.2f} S: {score_s:.2f}"
+                        dashboard_lines.append(line)
+
                         if last_processed_bars[symbol] != current_bar_time:
-                            # Rodar Modelo
-                            model = FalconQuantPremiumReversion(df)
-                            model.apply_trading_logic()
-                            
+                            # Detectada nova barra fechada -> Processar Sinal de Execução
                             signal_row = model.data.iloc[-2]
                             
-                            score_l = signal_row['score_long']
-                            score_s = signal_row['score_short']
-                            
-                            status_msg = f"[{symbol}] Bar: {current_bar_time} | L: {score_l:.2f} | S: {score_s:.2f}"
-                            
                             if signal_row['buy_signal'] == 1:
-                                logger.info(f"[{symbol}] 🟢 SINAL DE COMPRA DETECTADO")
+                                logger.info(f"[{symbol}] 🟢 SINAL DE COMPRA CONFIRMADO (Barra {current_bar_time})")
                                 curr_p = mt5.symbol_info_tick(symbol).ask
                                 self.execute_order(1, curr_p, signal_row['atr'])
                             elif signal_row['sell_signal'] == 1:
-                                logger.info(f"[{symbol}] 🔴 SINAL DE VENDA DETECTADO")
+                                logger.info(f"[{symbol}] 🔴 SINAL DE VENDA CONFIRMADO (Barra {current_bar_time})")
                                 curr_p = mt5.symbol_info_tick(symbol).bid
                                 self.execute_order(-1, curr_p, signal_row['atr'])
-                            else:
-                                print(f"\r{status_msg}", end="", flush=True)
                             
                             last_processed_bars[symbol] = current_bar_time
                 
-                time.sleep(20) # Reduzido impacto de pooling
+                # Imprimir Dashboard Multi-Lote
+                # Limpa as N linhas anteriores aproximadas com \r e \033[F (ANSI move up)
+                print("\033[H\033[J", end="") # Limpa tela ANSI (funciona no Windows Terminal)
+                print("="*50)
+                print("   🦅 FALCON ELITE LIVE - 24/7 MONITORING   ")
+                print("="*50)
+                for line in dashboard_lines:
+                    print(line)
+                print("="*50)
+                
+                time.sleep(15) 
                 
             except KeyboardInterrupt:
                 logger.info("Desligando robô...")
