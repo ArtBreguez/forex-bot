@@ -1,0 +1,9 @@
+backtest_eurusd.md
+backtest_gbpusd.md
+chart_eurusd_mc.png
+chart_eurusd_perf.png
+chart_gbpusd_mc.png
+chart_gbpusd_perf.png
+*.csv
+*.parquet
+__pycache__
